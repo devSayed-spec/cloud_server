@@ -8,11 +8,13 @@ import os
 import json
 import queue
 import threading
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify, Response, render_template_string
 from flask_cors import CORS
 from datetime import datetime
 from blockchain import Blockchain
 
+load_dotenv()
 app          = Flask(__name__)
 CORS(app)
 blockchain   = Blockchain()
