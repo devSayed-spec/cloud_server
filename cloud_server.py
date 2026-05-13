@@ -3,6 +3,8 @@
 #  Politeknik Negeri Lhokseumawe
 #  Fungsi: Terima log dari server lokal, sajikan dashboard publik
 #  Deploy: railway.app (gratis)
+#  
+#  v2.0: Support photo_url dari ImgBB, gallery foto di dashboard
 # ================================================================
 import os
 import json
@@ -61,6 +63,7 @@ def log_masuk():
     data.setdefault("tanggal_akses", now.strftime("%Y-%m-%d"))
     data.setdefault("nama",          "Unknown")
     data.setdefault("status_akses",  "?")
+    data.setdefault("photo_url",     "")
 
     # Simpan ke blockchain lokal cloud
     blok = blockchain.tambah_blok(data)
@@ -72,6 +75,7 @@ def log_masuk():
         "jam_akses"    : data.get("jam_akses"),
         "tanggal_akses": data.get("tanggal_akses"),
         "status"       : data.get("status_akses"),
+        "photo_url"    : data.get("photo_url", ""),
         "blok_index"   : blok["index"],
     }
     with log_lock:
@@ -86,7 +90,7 @@ def log_masuk():
         "valid"    : blockchain.validasi_rantai(),
     })
 
-    return jsonify({"ok": True, "blok": blok["index"]})
+    return jsonify({"ok": True, "blok": blok["index"], "photo_url": data.get("photo_url", "")})
 
 
 # ================================================================
@@ -174,18 +178,27 @@ DASHBOARD_HTML = """
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; }
+  
   header {
     background: var(--card); border-bottom: 1px solid var(--border);
     padding: 16px 24px; display: flex; align-items: center; gap: 12px;
   }
   header h1 { font-size: 1rem; letter-spacing: 2px; color: var(--green); }
   header span { font-size: .75rem; color: var(--muted); }
+  
   .live-dot {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--green); animation: pulse 1.5s infinite;
   }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 20px 24px 0; }
+  
+  .grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); 
+    gap: 12px; 
+    padding: 20px 24px 0; 
+  }
+  
   .stat-card {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 8px; padding: 16px;
@@ -196,21 +209,47 @@ DASHBOARD_HTML = """
   .value.red   { color: var(--red);   }
   .value.blue  { color: var(--blue);  }
   .value.yellow{ color: var(--yellow);}
-  .log-section { padding: 20px 24px; }
-  .log-section h2 { font-size: .8rem; letter-spacing: 2px; color: var(--muted); margin-bottom: 12px; }
-  .log-list { display: flex; flex-direction: column; gap: 6px; max-height: 60vh; overflow-y: auto; }
+  
+  .container {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 20px;
+    padding: 20px 24px;
+  }
+  
+  .log-section h2 { 
+    font-size: .8rem; 
+    letter-spacing: 2px; 
+    color: var(--muted); 
+    margin-bottom: 12px; 
+  }
+  
+  .log-list { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 6px; 
+    max-height: 60vh; 
+    overflow-y: auto; 
+  }
+  
   .log-item {
     background: var(--card); border: 1px solid var(--border);
     border-radius: 6px; padding: 10px 14px;
     display: grid; grid-template-columns: 1fr 1fr 1fr auto;
     gap: 8px; align-items: center; font-size: .8rem;
     animation: fadeIn .3s ease;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
   }
+  .log-item:hover { border-color: var(--blue); background: rgba(59,130,246,.05); }
+  
   @keyframes fadeIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:none} }
+  
   .log-item.berhasil { border-left: 3px solid var(--green); }
   .log-item.gagal    { border-left: 3px solid var(--red);   }
   .log-item.daftar   { border-left: 3px solid var(--blue);  }
   .log-item.hapus    { border-left: 3px solid var(--yellow); }
+  
   .nama { color: var(--text); font-weight: bold; }
   .waktu { color: var(--muted); font-size: .75rem; }
   .badge {
@@ -223,7 +262,42 @@ DASHBOARD_HTML = """
   .badge.hapus    { background: rgba(245,158,11,.15); color: var(--yellow); }
   .blok { color: var(--muted); font-size: .7rem; }
   .empty { color: var(--muted); text-align: center; padding: 40px; font-size: .8rem; }
-  footer { padding: 16px 24px; font-size: .7rem; color: var(--muted); border-top: 1px solid var(--border); }
+  
+  .photo-gallery {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+    max-height: 60vh; overflow-y: auto;
+  }
+  
+  .photo-item {
+    margin-bottom: 10px; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  
+  .photo-img {
+    width: 100%; height: auto; display: block;
+    background: var(--bg);
+  }
+  
+  .photo-info {
+    padding: 6px; background: rgba(0,0,0,.3); font-size: .7rem;
+    color: var(--muted);
+  }
+  
+  footer { 
+    padding: 16px 24px; 
+    font-size: .7rem; 
+    color: var(--muted); 
+    border-top: 1px solid var(--border); 
+  }
+  
+  @media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; }
+  }
+  
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--card); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -242,20 +316,31 @@ DASHBOARD_HTML = """
   <div class="stat-card"><div class="label">RANTAI VALID</div><div class="value green" id="s-valid">–</div></div>
 </div>
 
-<div class="log-section">
-  <h2>LOG AKSES TERBARU</h2>
-  <div class="log-list" id="log-list">
-    <div class="empty">Menunggu data dari server lokal...</div>
+<div class="container">
+  <div class="log-section">
+    <h2>LOG AKSES TERBARU</h2>
+    <div class="log-list" id="log-list">
+      <div class="empty">Menunggu data dari server lokal...</div>
+    </div>
+  </div>
+  
+  <div>
+    <h2 style="font-size:.8rem;letter-spacing:2px;color:var(--muted);margin-bottom:12px">GALERI FOTO TERBARU</h2>
+    <div class="photo-gallery" id="photo-gallery">
+      <div class="empty" style="padding:20px;font-size:.75rem">Menunggu foto...</div>
+    </div>
   </div>
 </div>
 
 <footer>
-  Data diterima dari server lokal via HTTPS · Blockchain: SHA256 lokal + Polygon Amoy Testnet
+  Data diterima dari server lokal via HTTPS · Blockchain: SHA256 lokal + Polygon Amoy Testnet · Foto dari ImgBB
 </footer>
 
 <script>
 const logList = document.getElementById('log-list');
+const photoGallery = document.getElementById('photo-gallery');
 let logItems  = [];
+let photoItems = [];
 
 function updateStats(stat) {
   document.getElementById('s-blok').textContent     = stat.total_blok     || 0;
@@ -272,11 +357,28 @@ function addLog(d) {
     jam_akses    : d.jam_akses     || '-',
     tanggal_akses: d.tanggal_akses || '-',
     status,
+    photo_url    : d.photo_url     || '',
     blok_index   : d.blok_index    ?? '-',
   };
   logItems.unshift(item);
   if (logItems.length > 100) logItems.pop();
   renderLog();
+  
+  // Tambah ke galeri foto kalau ada
+  if (item.photo_url) {
+    addPhoto(item);
+  }
+}
+
+function addPhoto(logItem) {
+  photoItems.unshift({
+    nama: logItem.nama,
+    jam_akses: logItem.jam_akses,
+    photo_url: logItem.photo_url,
+    status: logItem.status
+  });
+  if (photoItems.length > 20) photoItems.pop();
+  renderGallery();
 }
 
 function renderLog() {
@@ -294,22 +396,48 @@ function renderLog() {
   `).join('');
 }
 
+function renderGallery() {
+  if (!photoItems.length) {
+    photoGallery.innerHTML = '<div class="empty" style="padding:20px;font-size:.75rem">Belum ada foto.</div>';
+    return;
+  }
+  photoGallery.innerHTML = photoItems.map(p => `
+    <div class="photo-item">
+      <img class="photo-img" src="${p.photo_url}" alt="Foto ${p.nama}" 
+        onerror="this.style.display='none'">
+      <div class="photo-info">
+        <div style="font-weight:bold">${p.nama}</div>
+        <div>${p.jam_akses} · ${p.status.toUpperCase()}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
 // SSE
 const es = new EventSource('/events');
 es.onmessage = e => {
-  const msg = JSON.parse(e.data);
-  if (msg.tipe === 'ping') return;
+  try {
+    const msg = JSON.parse(e.data);
+    if (msg.tipe === 'ping') return;
 
-  if (msg.tipe === 'init') {
-    const d = msg.data;
-    if (d.statistik) updateStats(d.statistik);
-    if (d.recent)    { logItems = d.recent; renderLog(); }
-    return;
-  }
+    if (msg.tipe === 'init') {
+      const d = msg.data;
+      if (d.statistik) updateStats(d.statistik);
+      if (d.recent) { 
+        logItems = d.recent; 
+        photoItems = d.recent.filter(x => x.photo_url);
+        renderLog();
+        renderGallery();
+      }
+      return;
+    }
 
-  if (msg.data) {
-    addLog(msg.data);
-    if (msg.data.statistik) updateStats(msg.data.statistik);
+    if (msg.data) {
+      addLog(msg.data);
+      if (msg.data.statistik) updateStats(msg.data.statistik);
+    }
+  } catch (err) {
+    console.error('[SSE Parse Error]', err);
   }
 };
 es.onerror = () => console.warn('[SSE] Reconnecting...');
@@ -335,4 +463,6 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     print(f"\n[CLOUD] Server publik jalan di port {port}")
     print(f"[CLOUD] Dashboard: http://0.0.0.0:{port}/")
+    print(f"[CLOUD] SSE: /events")
+    print(f"[CLOUD] API: /api/blockchain, /api/logs, /ping\n")
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
